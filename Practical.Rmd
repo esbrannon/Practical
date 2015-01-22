@@ -1,0 +1,129 @@
+---
+title: "Practical Machine Learning - Assignment"
+author: "Elliott Brannon"
+date: "Thursday, January 22, 2015"
+output: html_document
+---
+
+This assignment for the Pratical Machine Learning Coursera class takes exercise data and attempts to create a model which predicts the manner in which individuals exercise. First variables with low variance across observations or variables with many NA values were removed. Then the data was divided into training (80%) and testing (20%) sets. A random forest approach was used to create a model and this model was cross-validated with the testing set. The accuracy of the model was 99.8%.  Finally, the model was used to predict exercise for 20 observations from the test set provided by the course instructors. The model used correctly predicted the manner of exercise for 20/20 (100%) of the observations.
+
+### Download and read in the data, set seed, and load libraries
+
+Note the code downloading/saving of data has been supressed for privacy (full pathname required). It is important to set a seed so that the results are reproducible.
+
+```{r warning=FALSE}
+urltrain <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+urltest <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+
+set.seed(1551)
+library(caret)
+library(randomForest)
+
+```
+
+### Slice Data
+
+Note that the 'testing0' dataset is used for assignment submission and the 'testing' dataset is used for cross validation to determine the out of sample error rate. The data is divided into an 80%/20% split for training/testing based on the variable classe.
+
+```{r echo=FALSE}
+#download.file(urltrain, destfile="/home/elliott/R/Practical/data/temp1.csv")
+#download.file(urltest, destfile="/home/elliott/R/Practical/data/temp2.csv")
+
+training0 <- read.csv("/home/elliott/R/Practical/data/temp1.csv")
+testing0 <- read.csv("/home/elliott/R/Practical/data/temp2.csv")
+```
+
+```{r}
+inTrain <- createDataPartition(y=training0$classe, p=0.8, list=FALSE)
+training <- training0[inTrain,]
+testing <- training0[-inTrain,]
+```
+
+
+### Process Data
+
+Identify variables with little variability or variables which are mostly NAs and remove. Also remove user name and timestamps for analysis.
+
+```{r}
+nzv <- nearZeroVar(training0,saveMetrics=TRUE)
+
+nas <- data.frame(1)
+for(i in 1:160) {
+  nas[i,1] <- data.frame(sum(is.na((training0[,i]))))
+}
+nn <- cbind(nzv,nas)
+
+include <- rownames(subset(nn, nzv==FALSE & X1 == 0))
+
+vars <- names(training) %in% include
+  
+training2 <- training[vars]
+training2 <- training2[,6:59]
+```
+
+
+### Model Fit
+
+Fit the model using a random forest method. Other methods were originally tried, but the random forest method was determined to be the best. Note that after exlucding the variables from the step above, 53 predictors were left.
+
+
+```{r}
+
+modFit <-randomForest(classe ~ ., data=training2)
+
+```
+
+### Cross Validation
+
+The miss classifcation value below shows about 0.2% were misclassified or that the accuracy was 99.8%. The 95% CI of the accuracy was (99.6%, 99.91%). The Confusion Matrix also shows the difference between the predictions and the actual values. The Sensitivities, Specificities, Positive Predictive Values, and Negative Predictive Values for each classe can also be seen below. The top 20 variables listed by order of importance are also displayed below.
+
+
+```{r}
+missClass = function(values,prediction){sum(((prediction))!= values)/length(values)}
+values <- testing$classe
+predictions <- predict(modFit, testing)
+missClass(values, predictions)
+
+importance <- varImp(modFit)
+
+confMatrix <- table(predictions, values)
+
+confusionMatrix(confMatrix)
+
+importance <- varImp(modFit)
+importance <- cbind(rownames(importance),importance)
+importance <- data.frame(importance[order(-importance$Overall),])
+data.frame(importance[1:20,1:2])
+```
+
+### Predict classe for Assignment
+
+This assignment included testing the prediction model on a small data set and submitting the predicted answers. The prediction model was 100% correct, 20/20 of the submitted answers were correct.
+
+```{r}
+
+answers <- as.character(predict(modFit, testing0))
+answers
+
+```
+
+### Write answers to file
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+```
+
+```{r echo=FALSE}
+setwd("/home/elliott/R/Practical/answers")
+pml_write_files(answers)
+
+```
+
+### Conclusion
+
+The model was highly accurate and correctly predicted 20/20 from the test set. The random forest approach to machine learning was useful for this assigment. Note that directly using the 'randomForest()' function rather than "method='rf'" in the 'train' function processed the data much more quickly. 
